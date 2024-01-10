@@ -1,6 +1,8 @@
-import os
+import csv
 import jax
 import numpy as np
+import os
+import datetime
 import torch
 import torchtext
 import torchvision
@@ -8,6 +10,67 @@ import torchvision.transforms as transforms
 from datasets import DatasetDict, load_dataset
 from torch.utils.data import TensorDataset, random_split
 from tqdm import tqdm
+
+
+# ### Bitcoin - USD Price Prediction
+# **Task**: Predict next Bitcoin price given sequence model over past prices (1 price => 1 price).
+def create_crypto_dataset(n_examples=1024 * 10, bsz=1024):
+    print("[*] Generating Bitcoin Dataset")
+
+    btc_hourly = []
+    with open("./datasets/Binance_BTC_USDT_1h.csv") as csvfile:
+        tick_reader = csv.DictReader(csvfile, delimiter=",")
+        for row in tick_reader:
+            date = datetime.datetime.strptime(
+                row["Date"][:19], "%Y-%m-%d %H:%M:%S"
+            )
+            open_price = float(row["Open"])
+            unix_time = int(datetime.datetime.timestamp(date))
+            btc_hourly.append((unix_time, open_price))
+
+    btc_hourly = sorted(btc_hourly, key=lambda r: r[0])
+    rates = np.array([r[1] for r in btc_hourly])
+    dates = np.array([r[0] for r in btc_hourly])
+
+    # Constants
+    SEQ_LENGTH, N_CLASSES, IN_DIM = bsz, 15000, 1
+    x = rates
+    y = np.digitize(rates, np.linspace(rates.min(), rates.max(), num=N_CLASSES))
+
+    # Tile this `n_examples` times...
+    data = torch.Tensor(
+        extract_random_slices(y, slice_size=bsz, n_slices=n_examples)
+    ).unsqueeze(-1)
+
+    # Build Datasets -- Two entries to match (inputs, targets) structure
+    train = TensorDataset(data, data)
+    test = TensorDataset(data[:1], data[:1])
+
+    # Return data loaders, with the provided batch size
+    trainloader = torch.utils.data.DataLoader(
+        train, batch_size=bsz, shuffle=True
+    )
+    testloader = torch.utils.data.DataLoader(
+        test, batch_size=bsz, shuffle=False
+    )
+
+    return trainloader, testloader, N_CLASSES, SEQ_LENGTH, IN_DIM
+
+
+def extract_random_slices(data, slice_size=128, n_slices=128):
+    # Ensure data has enough points
+    if len(data) < slice_size:
+        raise ValueError("Slice size is larger than data length.")
+
+    # Generate random start indices for slices
+    start_indices = np.random.choice(
+        len(data) - slice_size, n_slices, replace=False
+    )
+
+    # Extract slices
+    slices = np.array([data[i : i + slice_size] for i in start_indices])
+
+    return slices
 
 
 # ### $sin(x)$
@@ -660,6 +723,7 @@ def create_listops_classification_dataset(bsz):
 
 
 Datasets = {
+    "crypto": create_crypto_dataset,
     "mnist": create_mnist_dataset,
     "quickdraw": create_quickdraw_dataset,
     "fsdd": create_fsdd_dataset,

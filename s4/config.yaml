@@ -1,5 +1,5 @@
-dataset: mnist-classification
-layer: s4
+dataset: crypto
+layer: ssm
 seed: 0
 
 model:

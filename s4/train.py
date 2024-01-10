@@ -77,7 +77,7 @@ def create_train_state(
         np.array(next(iter(trainloader))[0].numpy()),
     )
     # Note: Added immediate `unfreeze()` to play well w/ Optax. See below!
-    params = params["params"].unfreeze()
+    params = params["params"]  # .unfreeze()
 
     # Handle learning rates:
     # - LR scheduler
